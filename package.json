@@ -11,7 +11,8 @@
 		"mongodb": "^2.2.5",
 		"mongoose": "^5.4.3",
 		"cors": "^2.8.1",
-		"body-parser": "^1.15.2"
+		"body-parser": "^1.15.2",
+    "axios": "latest"
 	},
 	"engines": {
 		"node": "4.4.5"

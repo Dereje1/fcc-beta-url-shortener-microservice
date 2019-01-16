@@ -7,8 +7,7 @@ var mongoose = require('mongoose');
 var cors = require('cors');
 /* additional Modules needed */
 const bodyParser = require('body-parser');
-const dns = require('dns');
-const url = require('url');
+const axios= require('axios'); //verify submitted url
 
 var app = express();
 
@@ -32,37 +31,36 @@ app.get('/', function(req, res){
 /* mongoose* and schema*/
 mongoose.connect(process.env.MONGO_URI,  {useNewUrlParser: true })
 mongoose.connection.on('connected', () => console.log('db connected!'));
+mongoose.set('useCreateIndex', true);
 
 const linksSchema = new mongoose.Schema({
-    original: {type: String, required: true},
-    shortened: {type: String, required: true},
+    original: {type: String, required: true, unique:true},
+    shortened: {type: String, required: true, unique:true},
 }, {timestamps: true})
 
 const Link = mongoose.model('Link', linksSchema)
 
 // middleware to verify link
 const verifyURL = (req, res, next)=>{
-    const requestedUrl = url.parse(req.body.url)
-    if(requestedUrl.host){// returns false if link cant be parsed by url
-      dns.lookup(requestedUrl.host,(err, data)=>{// domain check returns err if can't get domain
-        if(err) res.json({"error":"invalid URL"})
-        else next()
+    const urlToTest = new URL(req.body.url)
+    axios.get(urlToTest.href)
+      .then(r=> {
+            req.validatedURL = urlToTest.href
+            next()
       })
-    }else res.json({"error":"invalid URL"})
+      .catch(e=> res.json({"error":"invalid URL"}))
 }
 
 /*API endpoints*/
 // post new link end point
 app.post("/api/shorturl/new", verifyURL, (req, res) =>{
-  const requestedURL = new URL(req.body.url);
-  const query={original: requestedURL}
+  const query={original: req.validatedURL}
   Link.find(query,(err,data)=>{// first check if link already in db
     if(err) return err
-    console.log(data)
     if(data.length){//Url has already been created just send existing info from db
       res.json({original_url: data[0].original, short_url: data[0].shortened})
     }else{//add new Link doc
-      const newEntry = {original: requestedURL, shortened: generateKey()}
+      const newEntry = {original: req.validatedURL, shortened: generateKey()}
       Link.create(newEntry,(err,data)=>{
         if(err) return err
         res.json({original_url: data.original, short_url: data.shortened})
@@ -72,8 +70,7 @@ app.post("/api/shorturl/new", verifyURL, (req, res) =>{
 });
 // redirect from shortened endpoint
 app.get('/api/shorturl/:key', (req, res)=>{
-  console.log(req.params.key)
-  const query = {shortened: req.params.key}
+  const query = {shortened: req.params.key.toUpperCase()}
   Link.find(query,(err, data)=>{
     if(err) return err
     if(!data.length)res.json({"error":"invalid shortened URL"}) // no shortened key found
@@ -86,7 +83,6 @@ app.listen(port, function () {
 });
 
 /* Utilities */
-
 const generateKey = () =>{// random key generator
   const all='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   let key=''
